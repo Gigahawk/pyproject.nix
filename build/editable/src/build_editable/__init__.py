@@ -6,7 +6,8 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 from textwrap import dedent
-from typing import Any, Union, cast
+from typing import Any, Union, cast, Dict, List
+from typing import Generator as TGenerator
 import shutil
 
 # Backwards compat with old Python for sandbox builds.
@@ -24,7 +25,6 @@ class ArgsNS(argparse.Namespace):
     python: str  # pyright: ignore[reportUninitializedInstanceVariable]
     dist: str  # pyright: ignore[reportUninitializedInstanceVariable]
     verbose: str  # pyright: ignore[reportUninitializedInstanceVariable]
-
 
 
 def python_interpreter() -> str:
@@ -49,7 +49,7 @@ arg_parser.add_argument("-v", "--verbose", action="store_true")
 
 
 @contextmanager
-def dist_dir(arg: Union[str, None]) -> Generator[Path]:
+def dist_dir(arg: Union[str, None]) -> TGenerator[Path, None, None]:
     """Return a uniform looking context manager for dist path"""
     if arg is None:
         tmp_dir = tempfile.TemporaryDirectory()
@@ -71,7 +71,7 @@ def main():
     cwd = Path.cwd()
 
     with open(cwd.joinpath("pyproject.toml"), "rb") as pyproject_file:
-        pyproject: dict[str, Any] = tomllib.load(pyproject_file)  # pyright: ignore[reportUnknownMemberType,reportExplicitAny,reportUnknownVariableType]
+        pyproject: Dict[str, Any] = tomllib.load(pyproject_file)  # pyright: ignore[reportUnknownMemberType,reportExplicitAny,reportUnknownVariableType]
 
     # Get build backend with fallback behaviour
     # https://pip.pypa.io/en/stable/reference/build-system/pyproject-toml/#fallback-behaviour
@@ -113,7 +113,7 @@ def main():
         if returncode != 0:
             sys.exit(returncode)
 
-        build_results: list[str] = []
+        build_results: List[str] = []
         for child in dist.iterdir():
             build_results.append(child.name)
 

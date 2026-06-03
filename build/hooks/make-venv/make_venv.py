@@ -3,28 +3,53 @@ import argparse
 import contextlib
 import fnmatch
 import os.path
+import os
 import shutil
 import subprocess
 import sys
 from functools import lru_cache
 from pathlib import Path
 from stat import S_ISDIR, S_ISLNK, S_ISREG
-from typing import Optional, Union
+from typing import Optional, Union, Dict, List, Tuple
 from venv import EnvBuilder
 
-MergedInputs = Union[Path, None, dict[str, "MergedInputs"]]
+MergedInputs = Union[Path, None, Dict[str, "MergedInputs"]]
 
 
 EXECUTABLE = os.path.basename(sys.executable)
 
 
+def is_relative_to(self, *other):
+    """Return True if the path is relative to another path or False."""
+    try:
+        self.relative_to(*other)
+        return True
+    except ValueError:
+        return False
+
+
+def readlink(self):
+    """
+    Return the path to which the symbolic link points.
+    """
+    path = self._accessor.readlink(self)
+    obj = self._from_parts((path,), init=False)
+    obj._init(template=self)
+    return obj
+
+
+# Monkeypatch for 3.8 compat
+Path.is_relative_to = is_relative_to
+Path.readlink = readlink
+
+
 class ArgsNS(argparse.Namespace):
     out: str
     python: str
-    deps: list[str]
-    env: list[str]
-    skip: list[str]
-    ignore_collisions: list[str]
+    deps: List[str]
+    env: List[str]
+    skip: List[str]
+    ignore_collisions: List[str]
 
     def __init__(self):
         self.out = ""
@@ -50,7 +75,7 @@ arg_parser.add_argument(
 
 
 class FileCollisionError(Exception):
-    def __init__(self, inputs: list[Path]):
+    def __init__(self, inputs: List[Path]):
         err = f"""Two or more packages are trying to provide the same file with different contents
 
         Files: {" ".join((str(x) for x in inputs))}
@@ -64,7 +89,7 @@ class FileMergeError(Exception):
     pass
 
 
-def compare_paths(paths: list[Path]) -> bool:
+def compare_paths(paths: List[Path]) -> bool:
     if len(paths) < 2:
         return True
 
@@ -94,9 +119,9 @@ def lstat(path: Path):
 
 
 def merge_inputs(
-    inputs: list[Path],
-    skip_paths: Optional[list[str]] = None,
-    ignore_collisions: Optional[list[str]] = None,
+    inputs: List[Path],
+    skip_paths: Optional[List[str]] = None,
+    ignore_collisions: Optional[List[str]] = None,
 ) -> MergedInputs:
     """
     Merge multiple store paths
@@ -105,7 +130,7 @@ def merge_inputs(
     skip_paths = skip_paths or []
     ignore_collisions = ignore_collisions or []
 
-    def recurse(inputs: list[Path], stack: tuple[str, ...]) -> MergedInputs:
+    def recurse(inputs: List[Path], stack: Tuple[str, ...]) -> MergedInputs:
         path_rel = "/".join(stack)
 
         # Check for skipped path
@@ -119,7 +144,7 @@ def merge_inputs(
             return inputs[0]
 
         if any(S_ISDIR(lstat(input).st_mode) for input in inputs):  # Directories
-            entries: dict[str, list[Path]] = {}
+            entries: Dict[str, List[Path]] = {}
 
             for input in inputs:
                 for child in input.iterdir():
@@ -312,7 +337,7 @@ def main():
     python_root = Path(args.python)
     python_bin = python_root.joinpath("bin")
 
-    dependencies: list[Path] = []  # List of dependency roots
+    dependencies: List[Path] = []  # List of dependency roots
     seen_roots: set[str] = set()  # Keep track of unique dependency roots
 
     # Populate dependencies from precisely passed options
